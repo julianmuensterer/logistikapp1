@@ -60,3 +60,26 @@ describe('Frame2D', () => {
     expect(sol.reactions[1] + sol.reactions[b * 3 + 1]).toBeCloseTo(50, 6);
   });
 });
+
+import { lowestModes } from './modal';
+
+describe('modal analysis', () => {
+  it('cantilever: first natural frequency f1 = 1.875²/(2π L²) √(EI/m)', () => {
+    const m = new Frame2D();
+    const L = 10, nEl = 40, mu = 0.5; // t/m
+    for (let k = 0; k <= nEl; k++) m.addNode((L * k) / nEl, 0);
+    for (let k = 0; k < nEl; k++) m.addElement({ type: 'beam', i: k, j: k + 1, E, A, I });
+    m.supports.push({ node: 0, ux: true, uy: true, rz: true });
+    const mass = new Float64Array(m.dofCount);
+    for (let k = 0; k <= nEl; k++) {
+      const share = (mu * L) / nEl / (k === 0 || k === nEl ? 2 : 1);
+      mass[k * 3] = share;
+      mass[k * 3 + 1] = share;
+    }
+    const [m1, m2] = lowestModes(m, mass, 2);
+    const f1 = (1.8751 ** 2 / (2 * Math.PI * L * L)) * Math.sqrt((E * I) / mu);
+    const f2 = (4.6941 ** 2 / (2 * Math.PI * L * L)) * Math.sqrt((E * I) / mu);
+    expect(m1.f).toBeCloseTo(f1, 2);
+    expect(m2.f / f2).toBeCloseTo(1, 2);
+  });
+});

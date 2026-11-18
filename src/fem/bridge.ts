@@ -15,6 +15,7 @@
  * All section properties are rounded teaching values, not design data.
  */
 import { Frame2D, type ElementLoad, type Solution } from './frame2d';
+import { lowestModes, type Mode } from './modal';
 
 // ---------- Geometry (real values, rounded) ----------
 export const SPANS = [204, 342, 342, 342, 342, 342, 342, 204];
@@ -130,11 +131,83 @@ export class BridgeModel {
   /** lateral reactions at the piers per unit wind pressure (deck only) [kN] */
   pierReactionW: number[] = [];
 
-  constructor() {
+  /** maximum element length [m] (mesh refinement) */
+  readonly meshSize: number;
+  /** stays removed with the scissors, keys "pylon:side:k" */
+  readonly cutStays: ReadonlySet<string>;
+  /** geometry of removed stays (for drawing the cut ends) */
+  cutStayGeometry: { key: string; deckNode: number; topNode: number }[] = [];
+  /** self-weight per unit length for every vertical-model element [kN/m] (for masses) */
+  lineWeight: number[] = [];
+  /** time needed to assemble and solve the unit load cases [ms] */
+  solveMs = 0;
+
+  constructor(options: { meshSize?: number; cutStays?: ReadonlySet<string> } = {}) {
+    this.meshSize = options.meshSize ?? 15;
+    this.cutStays = options.cutStays ?? new Set();
+    const t0 = performance.now();
     this.buildVertical();
     this.buildLateral();
     this.solveUnitCases();
+    this.solveMs = performance.now() - t0;
     this.buildChecks();
+  }
+
+  /**
+   * Natural modes of both plane models (lumped masses from the self-weight).
+   * Vertical model: in-plane (vertical/longitudinal) modes. Lateral model: sideways
+   * deck modes; the piers contribute their stiffness and ~24 % of their mass.
+   */
+  modes(count = 4): { kind: 'vertical' | 'lateral'; mode: Mode }[] {
+    if (this.modeCache) return this.modeCache;
+    const v = this.vertical;
+    const mv = new Float64Array(v.dofCount);
+    v.elements.forEach((el, idx) => {
+      const { L } = v.geometry(el);
+      const half = (this.lineWeight[idx] * L) / G_ACC / 2; // [t]
+      for (const node of [el.i, el.j]) {
+        mv[node * 3] += half;
+        mv[node * 3 + 1] += half;
+      }
+    });
+    const lat = this.lateral;
+    const ml = new Float64Array(lat.dofCount);
+    lat.elements.forEach((el) => {
+      const { L } = lat.geometry(el);
+      const half = (DECK_DEAD_LOAD * L) / G_ACC / 2;
+      ml[el.i * 3 + 1] += half;
+      ml[el.j * 3 + 1] += half;
+    });
+    PIER_X.forEach((xp, p) => {
+      const t = lat.nodes.findIndex((n) => Math.abs(n.x - xp) < 1e-6);
+      const H = PIER_HEIGHTS[p];
+      const sH = splitLength(H);
+      const pierMass = (SECTIONS.pierSplit.A * sH + SECTIONS.pierLower.A * (H - sH)) * CONCRETE.gamma / G_ACC;
+      ml[t * 3 + 1] += 0.24 * pierMass + (PYLON_DEAD_LOAD * PYLON_HEIGHT) / G_ACC;
+    });
+    this.modeCache = [
+      ...lowestModes(v, mv, count).map((mode) => ({ kind: 'vertical' as const, mode })),
+      ...lowestModes(lat, ml, count).map((mode) => ({ kind: 'lateral' as const, mode })),
+    ].sort((a, b) => a.mode.f - b.mode.f);
+    return this.modeCache;
+  }
+
+  private modeCache?: { kind: 'vertical' | 'lateral'; mode: Mode }[];
+
+  static stayKey(pylon: number, side: number, k: number): string {
+    return `${pylon}:${side}:${k}`;
+  }
+
+  /** Size of the global stiffness matrices (for the FEM info panel). */
+  matrixStats() {
+    const s = (f: Frame2D) => {
+      const sys = f.factorize();
+      return {
+        nodes: f.nodes.length, elements: f.elements.length, dofs: f.dofCount, equations: sys.m,
+        bandwidth: sys.b, nonZeros: sys.nonZeros, denseBytes: sys.m * sys.m * 8, bandBytes: sys.m * (sys.b + 1) * 8,
+      };
+    };
+    return { vertical: s(this.vertical), lateral: s(this.lateral) };
   }
 
   private buildVertical(): void {
@@ -151,7 +224,7 @@ export class BridgeModel {
     for (let t = 0; t < sorted.length; t++) {
       if (t > 0) {
         const gap = sorted[t] - sorted[t - 1];
-        const parts = Math.ceil(gap / 15);
+        const parts = Math.ceil(gap / this.meshSize - 1e-9);
         for (let p = 1; p < parts; p++) refined.push(sorted[t - 1] + (gap * p) / parts);
       }
       refined.push(sorted[t]);
@@ -176,9 +249,16 @@ export class BridgeModel {
     PIER_X.forEach((xp, p) => {
       const deckNode = nodeAtX.get(xp)!;
       // --- pylon
-      const heights = [0, 20, 40];
-      for (let k = 0; k < STAYS_PER_SIDE; k++) heights.push(stayPylonHeight(k));
-      heights.push(PYLON_HEIGHT);
+      const base = [0, 20, 40];
+      for (let k = 0; k < STAYS_PER_SIDE; k++) base.push(stayPylonHeight(k));
+      base.push(PYLON_HEIGHT);
+      // refine long pylon elements (below the lowest stay anchor) to the mesh size
+      const heights = [0];
+      for (let t = 1; t < base.length; t++) {
+        const parts = Math.max(1, Math.ceil((base[t] - base[t - 1]) / this.meshSize - 1e-9));
+        for (let q = 1; q <= parts; q++) heights.push(base[t - 1] + ((base[t] - base[t - 1]) * q) / parts);
+      }
+      const anchorIndex = (k: number) => heights.findIndex((h) => Math.abs(h - stayPylonHeight(k)) < 1e-6);
       const pyNodes = [deckNode];
       for (const h of heights.slice(1)) pyNodes.push(m.addNode(xp, h));
       this.pylonTopNodes.push(pyNodes[pyNodes.length - 1]);
@@ -194,7 +274,11 @@ export class BridgeModel {
       for (const side of [-1, 1] as const)
         for (let k = 0; k < STAYS_PER_SIDE; k++) {
           const anchor = nodeAtX.get(xp + side * stayAnchorOffset(k))!;
-          const top = pyNodes[3 + k];
+          const top = pyNodes[anchorIndex(k)];
+          if (this.cutStays.has(BridgeModel.stayKey(p, side, k))) {
+            this.cutStayGeometry.push({ key: BridgeModel.stayKey(p, side, k), deckNode: anchor, topNode: top });
+            continue;
+          }
           const A = stayStrands(k) * 150e-6;
           const idx = m.addElement({ type: 'truss', i: anchor, j: top, E: STRAND.E, A, I: 0 });
           this.elements.push({
@@ -205,8 +289,11 @@ export class BridgeModel {
       // --- pier (z measured downwards from the deck)
       const H = PIER_HEIGHTS[p];
       const s = splitLength(H);
-      const zs = [0, s / 3, (2 * s) / 3, s];
-      for (let t = 1; t <= 5; t++) zs.push(s + ((H - s) * t) / 5);
+      const nSplit = Math.max(3, Math.ceil(s / this.meshSize - 1e-9));
+      const nLower = Math.max(5, Math.ceil((H - s) / this.meshSize - 1e-9));
+      const zs = [0];
+      for (let t = 1; t <= nSplit; t++) zs.push((s * t) / nSplit);
+      for (let t = 1; t <= nLower; t++) zs.push(s + ((H - s) * t) / nLower);
       const pierNodes = [deckNode];
       for (const z of zs.slice(1)) pierNodes.push(m.addNode(xp, -z));
       for (let t = 0; t < pierNodes.length - 1; t++) {
@@ -246,21 +333,24 @@ export class BridgeModel {
     const v = this.vertical;
     const deckLoads = (q: number): ElementLoad[] =>
       this.elements.filter((e) => e.part === 'deck').map((e) => ({ element: e.index, qx: 0, qy: -q }));
-    const g: ElementLoad[] = [...deckLoads(DECK_DEAD_LOAD)];
+    this.lineWeight = new Array(v.elements.length).fill(0);
     for (const e of this.elements) {
-      if (e.part === 'pylon') g.push({ element: e.index, qx: 0, qy: -PYLON_DEAD_LOAD });
-      if (e.part === 'pier') {
-        const sec = e.pier!.split ? SECTIONS.pierSplit : SECTIONS.pierLower;
-        g.push({ element: e.index, qx: 0, qy: -sec.A * CONCRETE.gamma });
-      }
+      if (e.part === 'deck') this.lineWeight[e.index] = DECK_DEAD_LOAD;
+      if (e.part === 'pylon') this.lineWeight[e.index] = PYLON_DEAD_LOAD;
+      if (e.part === 'pier') this.lineWeight[e.index] = (e.pier!.split ? SECTIONS.pierSplit : SECTIONS.pierLower).A * CONCRETE.gamma;
     }
+    const g: ElementLoad[] = this.elements
+      .filter((e) => this.lineWeight[e.index] > 0)
+      .map((e) => ({ element: e.index, qx: 0, qy: -this.lineWeight[e.index] }));
     // Self-weight: the real stays are pre-tensioned so that the deck sits in its target
     // shape. We mimic this by solving the dead-load case with very stiff stays.
     const stays = this.elements.filter((e) => e.part === 'stay').map((e) => v.elements[e.index]);
     const originalA = stays.map((s) => s.A);
     stays.forEach((s) => (s.A *= 50));
+    v.invalidate();
     [this.solG] = v.solve([{ distributed: g }]);
     stays.forEach((s, t) => (s.A = originalA[t]));
+    v.invalidate();
     [this.solQ] = v.solve([{ distributed: deckLoads(TRAFFIC_WIDTH * 1) }]);
     // Lateral: unit wind pressure on the deck
     const w = CD.deck * DECK_WIND_HEIGHT;

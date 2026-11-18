@@ -11,7 +11,7 @@
     <div id="app">
       <div id="viewport">
         <canvas id="scene"></canvas>
-        <div id="badge">Stylized model · not to scale · not a design tool</div>
+        <div id="badge">Stylized model · not a design tool · <b id="badge-scale">deformations exaggerated ×20</b></div>
         <div id="views">
           <button data-view="overview" class="active">Overview</button>
           <button data-view="side">Side</button>
@@ -23,7 +23,7 @@
           <div class="fem-head">
             <b>FE model (2D)</b>
             <span id="fem-stats"></span>
-            <label>Deformation ×<input id="scale" type="range" min="0" max="200" step="1" value="20" /><span id="scale-val">20</span></label>
+            <label title="1 = true scale">Deformation scale ×<input id="scale" type="range" min="1" max="200" step="1" value="20" /><span id="scale-val">20</span> <button id="true-scale" class="mini">true scale</button></label>
           </div>
           <svg id="fem-svg"></svg>
           <div id="fem-tip"></div>
@@ -37,12 +37,14 @@
             <button id="reset">Reset loads</button>
           </div>
         </div>
+        <div id="toast" hidden></div>
         <div id="loading">Assembling stiffness matrix…</div>
       </div>
       <aside id="panel">
         <h1>Millau Bridge Lab</h1>
         <nav class="tabs">
           <button data-tab="loads" class="active">Loads</button>
+          <button data-tab="fem">FEM</button>
           <button data-tab="learn">Learn</button>
         </nav>
         <section id="tab-loads">
@@ -50,11 +52,24 @@
             <label for="traffic">Traffic load <span class="val" id="traffic-val"></span></label>
             <input id="traffic" type="range" min="0" max="25" step="0.1" value="0" />
             <div class="sub" id="traffic-sub"></div>
+            <label class="mix" for="mix">Vehicles
+              <select id="mix">
+                <option value="mixed">Mixed traffic</option>
+                <option value="car">Cars only</option>
+                <option value="truck">Trucks only</option>
+                <option value="tank">Toy tanks only</option>
+              </select>
+            </label>
           </div>
           <div class="control">
             <label for="wind">Wind speed at deck level <span class="val" id="wind-val"></span></label>
             <input id="wind" type="range" min="0" max="450" step="1" value="0" />
             <div class="sub" id="wind-sub"></div>
+          </div>
+          <div class="control cut">
+            <button id="cut-mode">✂ Cut cables</button>
+            <button id="restore" class="ghost"><span id="cut-count">Restore all cables</span></button>
+            <div class="sub">Cut stay cables and watch the forces redistribute. Hover a cable to aim, click to cut.</div>
           </div>
           <div class="control toggles">
             <label class="switch"><input id="safety" type="checkbox" /> Partial safety factors (γ)</label>
@@ -78,7 +93,27 @@
           <div class="result small">
             <div class="row"><span>Max. deck deflection</span><span id="defl"></span></div>
             <div class="row"><span>Max. lateral deck drift</span><span id="drift"></span></div>
+            <div class="row"><span>Lateral drift top of pier P2 (245 m)</span><span id="pier-drift"></span></div>
+            <div class="row sub"><span>Values are real (×1); the 3D and FE views exaggerate them.</span></div>
             <div class="row"><span>Self-weight deck + pylons</span><span id="selfw"></span></div>
+          </div>
+        </section>
+        <section id="tab-fem" hidden>
+          <div class="control">
+            <label for="mesh">Mesh refinement <span class="val" id="mesh-val"></span></label>
+            <input id="mesh" type="range" min="0" max="4" step="1" value="2" />
+            <div class="ticks"><span>coarse</span><span>fine</span></div>
+          </div>
+          <div class="result">
+            <div class="title">Size of the global stiffness matrix K</div>
+            <table id="matrix-info"></table>
+            <div class="sub">Only the free DOFs (supports removed) enter K. Nodes are numbered along the bridge, so K is banded: only the band has to be stored and factorised. The stay anchors force nodes every 12.5 m, so results converge already on coarse meshes.</div>
+          </div>
+          <div class="result">
+            <div class="title">Natural frequencies</div>
+            <button id="compute-modes">Compute modes</button>
+            <div class="sub" id="modes-note"></div>
+            <div id="modes-list"></div>
           </div>
         </section>
         <section id="tab-learn" hidden></section>
