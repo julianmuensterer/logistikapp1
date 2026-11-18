@@ -33,7 +33,8 @@ export const LEARN_CARDS: LearnCard[] = [
       tensile strength f<sub>uk</sub> = 1,860 MPa). The longest stay is about 180 m.</p>
       <p><b>Role in the load path:</b> elastic supports for the deck; they pull the deck up towards the pylon tops.</p>
       <p><b>FE model:</b> truss elements (axial force only). In the real bridge the stays are pre-tensioned so that the
-      deck reaches its target shape under self-weight; the model mimics this with stiff stays for the self-weight case.</p>`,
+      deck reaches its target shape under self-weight. The model applies a pretension force to every stay that lifts the deck weight of its
+      tributary length (12.5 m between anchors, more for the outermost stays), and the self-weight case is solved together with it (G+PT).</p>`,
   },
   {
     id: 'pylon',

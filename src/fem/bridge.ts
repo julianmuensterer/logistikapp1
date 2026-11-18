@@ -14,7 +14,7 @@
  *
  * All section properties are rounded teaching values, not design data.
  */
-import { Frame2D, type ElementLoad, type Solution } from './frame2d';
+import { Frame2D, type ElementLoad, type NodalLoad, type Solution } from './frame2d';
 import { lowestModes, type Mode } from './modal';
 
 // ---------- Geometry (real values, rounded) ----------
@@ -128,6 +128,8 @@ export class BridgeModel {
   solQ!: Solution;
   solW!: Solution;
   checks: CheckPoint[] = [];
+  /** stay pretension force per stay element [kN] */
+  stayPretension = new Map<number, number>();
   /** lateral reactions at the piers per unit wind pressure (deck only) [kN] */
   pierReactionW: number[] = [];
 
@@ -342,15 +344,24 @@ export class BridgeModel {
     const g: ElementLoad[] = this.elements
       .filter((e) => this.lineWeight[e.index] > 0)
       .map((e) => ({ element: e.index, qx: 0, qy: -this.lineWeight[e.index] }));
-    // Self-weight: the real stays are pre-tensioned so that the deck sits in its target
-    // shape. We mimic this by solving the dead-load case with very stiff stays.
-    const stays = this.elements.filter((e) => e.part === 'stay').map((e) => v.elements[e.index]);
-    const originalA = stays.map((s) => s.A);
-    stays.forEach((s) => (s.A *= 50));
-    v.invalidate();
-    [this.solG] = v.solve([{ distributed: g }]);
-    stays.forEach((s, t) => (s.A = originalA[t]));
-    v.invalidate();
+    // Self-weight + stay pretension (G+PT). The real stays are tensioned so that the deck
+    // sits in its target shape. Pretension forces follow from the classic "rigid supports"
+    // method: the deck is solved as a continuous beam on rigid supports at every stay
+    // anchor; the anchor reactions are the vertical components of the stay forces. Both
+    // stays of a pair get the same force, so the pylons are balanced under dead load.
+    this.stayPretension = this.computePretension();
+    const pt: NodalLoad[] = [];
+    for (const e of this.elements) {
+      if (e.part !== 'stay') continue;
+      const el = v.elements[e.index];
+      const T = this.stayPretension.get(e.index)!;
+      const { c, s } = v.geometry(el); // unit vector i (deck anchor) -> j (pylon)
+      // the shortened stay pulls the anchor towards the pylon and the pylon towards the anchor
+      pt.push({ node: el.i, fx: T * c, fy: T * s }, { node: el.j, fx: -T * c, fy: -T * s });
+    }
+    [this.solG] = v.solve([{ distributed: g, nodal: pt }]);
+    // element force = elastic part + pretension
+    for (const [idx, T] of this.stayPretension) this.solG.forces[idx].N += T;
     [this.solQ] = v.solve([{ distributed: deckLoads(TRAFFIC_WIDTH * 1) }]);
     // Lateral: unit wind pressure on the deck
     const w = CD.deck * DECK_WIND_HEIGHT;
@@ -360,6 +371,32 @@ export class BridgeModel {
       const t = lat.nodes.findIndex((n) => Math.abs(n.x - xp) < 1e-6);
       return Math.abs(this.solW.reactions[t * 3 + 1]);
     });
+  }
+
+  /**
+   * Stay pretension from the deck dead load: every stay lifts the deck weight of its
+   * tributary length (half the distance to the neighbouring anchors; the 30 m next to a
+   * pier are counted like a regular 12.5 m spacing, the pier carries the rest). Both
+   * stays of a pair get the same force, so the pylons are balanced under dead load.
+   */
+  private computePretension(): Map<number, number> {
+    const last = STAYS_PER_SIDE - 1;
+    // free ends of the outermost stays' tributary lengths: abutments and outermost anchors
+    const limits = [0, BRIDGE_LENGTH];
+    PIER_X.forEach((xp) => limits.push(xp - stayAnchorOffset(last), xp + stayAnchorOffset(last)));
+    const outward = (x: number, side: number) =>
+      Math.min(...limits.filter((o) => (o - x) * side > 1e-6).map((o) => Math.abs(o - x))) / 2;
+    const out = new Map<number, number>();
+    for (const e of this.elements) {
+      if (e.part !== 'stay') continue;
+      const { pylon, k } = e.stay!;
+      const xp = PIER_X[pylon], a = stayAnchorOffset(k);
+      const len = (side: number) => 6.25 + (k < last ? 6.25 : outward(xp + side * a, side));
+      const L = (len(-1) + len(1)) / 2;
+      const sinA = stayPylonHeight(k) / Math.hypot(stayPylonHeight(k), a);
+      out.set(e.index, (DECK_DEAD_LOAD * L) / sinA);
+    }
+    return out;
   }
 
   /** Lateral moment in a pier at depth z below the deck per unit wind pressure [kNm]. */
