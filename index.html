@@ -2,7 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#fffaf2" />
     <title>Millau Bridge Lab</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap" rel="stylesheet" />
@@ -27,7 +29,8 @@
         </div>
         <div id="fem">
           <div class="fem-head">
-            <b>FE model (2D)</b>
+            <button id="fem-toggle" class="mini" aria-expanded="true">FE model ▾</button>
+            <b class="fem-title">FE model (2D)</b>
             <span id="fem-stats"></span>
             <label title="1 = true scale">Deformation scale ×<input id="scale" type="range" min="1" max="200" step="1" value="20" /><span id="scale-val">20</span> <button id="true-scale" class="mini">true scale</button></label>
           </div>
@@ -75,7 +78,7 @@
           <div class="control cut">
             <button id="cut-mode">✂ Cut cables</button>
             <button id="restore" class="ghost"><span id="cut-count">Restore all cables</span></button>
-            <div class="sub">Cut stay cables and watch the forces redistribute. Hover a cable to aim, click to cut.</div>
+            <div class="sub" id="cut-help">Cut stay cables and watch the forces redistribute. Hover a cable to aim, click to cut.</div>
           </div>
           <div class="control toggles">
             <label class="switch"><input id="safety" type="checkbox" /> Partial safety factors (γ)</label>

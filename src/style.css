@@ -134,3 +134,45 @@ button.mode.active { background: var(--accent-2); color: white; }
 #hud-eta-bar, #hud-load-bar { height: 100%; width: 0; background: var(--ok); transition: width 0.15s, background 0.15s; }
 #hud-eta-val, #hud-load-val { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 13px; }
 .hud-sub { font-size: 11px; color: var(--muted); margin: 0 0 4px 90px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- phones and small tablets (desktop layout above is unchanged) ---------- */
+#fem-toggle { display: none; }
+button, input, select, label { touch-action: manipulation; }
+@media (max-width: 820px), (max-height: 500px) {
+  html, body { -webkit-text-size-adjust: 100%; }
+  #fem-toggle { display: inline-block; margin-left: 0; }
+  .fem-title, #fem-stats { display: none; }
+  #fem.collapsed #fem-svg { display: none; }
+  #fem { left: 8px; right: 8px; bottom: 8px; padding: 6px 8px 4px; }
+  .fem-head { gap: 8px; justify-content: space-between; flex-wrap: wrap; font-size: 12px; }
+  .fem-head input { width: 80px; }
+  #fem-svg { height: 110px; }
+  #badge { display: none; }
+  #views { top: 8px; left: 8px; right: 8px; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; }
+  #views::-webkit-scrollbar { display: none; }
+  #views button { flex: 0 0 auto; padding: 4px 10px; font-size: 14px; }
+  #hud { top: 50px; left: 8px; width: auto; max-width: calc(100% - 16px); padding: 6px 10px 4px; }
+  .hud-label { flex-basis: 70px; font-size: 12px; }
+  .hud-sub { margin-left: 78px; font-size: 10px; margin-bottom: 2px; }
+  #hud-load-sub { display: none; }
+  #hud .bar { height: 18px; }
+  #hud-eta-val, #hud-load-val { font-size: 12px; }
+  #failure { top: 50px; left: 8px; right: 8px; }
+  #failure .card { max-width: none; padding: 14px 16px; }
+  #toast { top: 50px; max-width: calc(100% - 24px); }
+  label.mix select { font-size: 16px; } /* iOS zooms into inputs below 16 px */
+  #panel h1 { font-size: 20px; margin-bottom: 8px; }
+}
+/* portrait phone: 3D view on top, controls below */
+@media (max-width: 820px) and (orientation: portrait) {
+  #app { flex-direction: column; height: 100dvh; }
+  #viewport { flex: 0 0 56dvh; }
+  #panel { width: auto; flex: 1; border-left: none; border-top: 2px solid var(--line); padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); }
+}
+/* landscape phone: narrower side panel */
+@media (max-height: 500px) and (orientation: landscape) {
+  #app { height: 100dvh; }
+  #panel { width: 290px; padding: 10px 12px; padding-right: calc(12px + env(safe-area-inset-right)); }
+  #hud { width: 270px; }
+  .hud-sub { display: none; }
+}
