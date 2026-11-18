@@ -97,3 +97,5 @@ button.active { background: var(--accent); color: white; }
 a { color: var(--accent-2); }
 button.mini { padding: 1px 8px; font-size: 12px; box-shadow: 0 2px 0 var(--ink); margin-left: 6px; }
 #badge b { color: var(--accent); }
+label.mix { margin-top: 6px; font-weight: 400 !important; font-size: 13px; align-items: center; }
+label.mix select { font: inherit; border: 2px solid var(--ink); border-radius: 8px; padding: 2px 6px; background: var(--card); }

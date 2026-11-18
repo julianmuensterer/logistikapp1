@@ -50,6 +50,14 @@
             <label for="traffic">Traffic load <span class="val" id="traffic-val"></span></label>
             <input id="traffic" type="range" min="0" max="25" step="0.1" value="0" />
             <div class="sub" id="traffic-sub"></div>
+            <label class="mix" for="mix">Vehicles
+              <select id="mix">
+                <option value="mixed">Mixed traffic</option>
+                <option value="car">Cars only</option>
+                <option value="truck">Trucks only</option>
+                <option value="tank">Toy tanks only</option>
+              </select>
+            </label>
           </div>
           <div class="control">
             <label for="wind">Wind speed at deck level <span class="val" id="wind-val"></span></label>

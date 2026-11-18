@@ -115,7 +115,10 @@ function init(): void {
     ev = model.evaluate(state.q, state.wind, state.safety);
     const trafficTotal = BridgeModel.trafficTotal(state.q);
     $('traffic-val').textContent = `${fmt(state.q, 1)} kN/m²`;
-    $('traffic-sub').textContent = `≈ ${fmt(Math.round(kNtoTonnes(trafficTotal) / 1.5))} toy cars of 1.5 t (shown: one layer of cars per kN/m²)`;
+    const tonnes = kNtoTonnes(trafficTotal);
+    $('traffic-sub').textContent = state.q > 0
+      ? `as heavy as ${fmt(Math.round(tonnes / 1.5))} cars (1.5 t) or ${fmt(Math.round(tonnes / 40))} trucks (40 t) or ${fmt(Math.round(tonnes / 60))} tanks (60 t). Shown: one layer of toy vehicles per kN/m².`
+      : 'Empty bridge. Shown: one layer of toy vehicles per kN/m².';
     const pw = windPressure(state.wind);
     $('wind-val').textContent = `${fmt(state.wind)} km/h`;
     $('wind-sub').textContent = `pressure ${fmt(pw, 2)} kN/m² · lateral force on deck ${MN(pw * CD.deck * DECK_WIND_HEIGHT * BRIDGE_LENGTH)}`;
@@ -172,6 +175,7 @@ function init(): void {
     camera.position.copy(mid).add(new THREE.Vector3(-0.45 * far, (part === 'deck' ? -0.3 : 0.35) * far, far));
     controls.update();
     for (const i of Object.values(inputs)) i.disabled = true;
+    $<HTMLSelectElement>('mix').disabled = true;
     const e = model.element(brokenElement);
     $('failure-element').innerHTML = `<b>${e.label}</b> failed at ${fmt(ev.eta[brokenElement] * 100)} % utilisation.`;
     $('failure-text').textContent = FAILURE_TEXT[e.part];
@@ -194,6 +198,7 @@ function init(): void {
     canvas.classList.remove('frozen');
     $('failure').hidden = true;
     for (const i of Object.values(inputs)) i.disabled = false;
+    $<HTMLSelectElement>('mix').disabled = false;
     // back to a safe state: keep the wind if it is survivable, otherwise remove it
     state.q = 0;
     inputs.traffic.value = '0';
@@ -204,6 +209,8 @@ function init(): void {
     recompute();
   };
 
+  const mix = $<HTMLSelectElement>('mix');
+  mix.onchange = () => { cars.setMix(mix.value); recompute(); };
   inputs.traffic.oninput = () => { state.q = Number(inputs.traffic.value); recompute(); };
   inputs.wind.oninput = () => { state.wind = Number(inputs.wind.value); recompute(); };
   inputs.safety.onchange = () => { state.safety = inputs.safety.checked; recompute(); };
