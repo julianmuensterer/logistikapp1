@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Millau Bridge Lab</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="viewport">
+        <canvas id="scene"></canvas>
+        <div id="badge">Stylized model · not to scale · not a design tool</div>
+        <div id="views">
+          <button data-view="overview" class="active">Overview</button>
+          <button data-view="side">Side</button>
+          <button data-view="under">Under the deck</button>
+          <button data-view="pylon">Pylon</button>
+          <button data-view="driver">Driver</button>
+        </div>
+        <div id="fem">
+          <div class="fem-head">
+            <b>FE model (2D)</b>
+            <span id="fem-stats"></span>
+            <label>Deformation ×<input id="scale" type="range" min="0" max="200" step="1" value="20" /><span id="scale-val">20</span></label>
+          </div>
+          <svg id="fem-svg"></svg>
+          <div id="fem-tip"></div>
+        </div>
+        <div id="failure" hidden>
+          <div class="card">
+            <h2>💥 Structural failure</h2>
+            <p id="failure-element"></p>
+            <p id="failure-text"></p>
+            <p id="failure-numbers"></p>
+            <button id="reset">Reset loads</button>
+          </div>
+        </div>
+        <div id="loading">Assembling stiffness matrix…</div>
+      </div>
+      <aside id="panel">
+        <h1>Millau Bridge Lab</h1>
+        <nav class="tabs">
+          <button data-tab="loads" class="active">Loads</button>
+          <button data-tab="learn">Learn</button>
+        </nav>
+        <section id="tab-loads">
+          <div class="control">
+            <label for="traffic">Traffic load <span class="val" id="traffic-val"></span></label>
+            <input id="traffic" type="range" min="0" max="25" step="0.1" value="0" />
+            <div class="sub" id="traffic-sub"></div>
+          </div>
+          <div class="control">
+            <label for="wind">Wind speed at deck level <span class="val" id="wind-val"></span></label>
+            <input id="wind" type="range" min="0" max="450" step="1" value="0" />
+            <div class="sub" id="wind-sub"></div>
+          </div>
+          <div class="control toggles">
+            <label class="switch"><input id="safety" type="checkbox" /> Partial safety factors (γ)</label>
+            <label class="switch"><input id="colors" type="checkbox" checked /> Colour by utilisation</label>
+          </div>
+          <div class="result big">
+            <div class="title">Tolerable traffic load <small id="tol-note"></small></div>
+            <div class="mn" id="tol-mn"></div>
+            <div class="t" id="tol-t"></div>
+            <div class="sub" id="tol-sub"></div>
+          </div>
+          <div class="result">
+            <div class="title">Applied traffic load</div>
+            <div class="row"><span id="app-mn"></span><span id="app-t"></span></div>
+          </div>
+          <div class="result">
+            <div class="title">Utilisation (max)</div>
+            <div class="bar"><div id="eta-bar"></div><span id="eta-val"></span></div>
+            <div class="sub" id="eta-el"></div>
+          </div>
+          <div class="result small">
+            <div class="row"><span>Max. deck deflection</span><span id="defl"></span></div>
+            <div class="row"><span>Max. lateral deck drift</span><span id="drift"></span></div>
+            <div class="row"><span>Self-weight deck + pylons</span><span id="selfw"></span></div>
+          </div>
+        </section>
+        <section id="tab-learn" hidden></section>
+      </aside>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
