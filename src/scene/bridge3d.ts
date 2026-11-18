@@ -60,8 +60,9 @@ export class Bridge3D {
       if (e.part === 'pylon') {
         const el = v.elements[e.index];
         const deckNode = model.deckNodes.find((n) => Math.abs(v.nodes[n].x - PIER_X[e.pylon!.pylon]) < 1e-6)!;
-        this.lateralIndex.set(el.i, this.lateralIndex.get(deckNode)!);
-        this.lateralIndex.set(el.j, this.lateralIndex.get(deckNode)!);
+        for (const node of [el.i, el.j])
+          if (!this.lateralIndex.has(node) || !model.deckNodes.includes(node))
+            this.lateralIndex.set(node, this.lateralIndex.get(deckNode)!);
       }
     // pier nodes: lateral displacement follows the bending line of a cantilever
     // loaded at its top (w = δ_top · ξ²(3 − ξ)/2, ξ = height above foundation / H)
@@ -74,7 +75,7 @@ export class Bridge3D {
         const el = v.elements[e.index];
         for (const [node, z] of [[el.i, zTopI], [el.j, zTopJ]] as const) {
           const xi = (H - z) / H;
-          if (node !== deckNode) this.pierShape.set(node, { lat: top, factor: (xi * xi * (3 - xi)) / 2 });
+          if (!model.deckNodes.includes(node)) this.pierShape.set(node, { lat: top, factor: (xi * xi * (3 - xi)) / 2 });
         }
       }
     this.nodePositions = v.nodes.map((n) => new THREE.Vector3(n.x - BRIDGE_LENGTH / 2, n.y, 0));
@@ -115,25 +116,22 @@ export class Bridge3D {
       const r = 0.25 + 0.012 * stayStrands(e.stay!.k);
       add(new THREE.CylinderGeometry(r, r, 1, 6));
     } else if (e.part === 'pylon') {
-      const { hI, hJ } = e.pylon!;
-      const spread = (h: number) => Math.max(0, 9 * (1 - h / 40));
-      if (hJ <= 40) {
-        // inverted-Y legs
-        const geo = new THREE.BoxGeometry(3, 1, 4);
-        add(geo, new THREE.Vector3(-spread(hI), 0, 0), new THREE.Vector3(-spread(hJ), 0, 0));
-        add(geo.clone(), new THREE.Vector3(spread(hI), 0, 0), new THREE.Vector3(spread(hJ), 0, 0));
+      const { hI, leg } = e.pylon!;
+      if (leg) {
+        // one leg of the inverted Y (the element itself is inclined)
+        add(new THREE.BoxGeometry(3, 1, 4));
       } else {
         const w = 4 - (hI - 40) / 30;
         add(new THREE.BoxGeometry(w, 1, 4));
       }
     } else {
-      const { pier, zTopI, zTopJ, split } = e.pier!;
+      const { pier, zTopI, zTopJ, split, transition } = e.pier!;
       const H = PIER_HEIGHTS[pier];
       const s = splitLength(H);
       if (split) {
-        const geo = new THREE.BoxGeometry(4, 1, 11);
-        add(geo, new THREE.Vector3(-5, 0, 0));
-        add(geo.clone(), new THREE.Vector3(5, 0, 0));
+        add(new THREE.BoxGeometry(4, 1, 11)); // one of the twin shafts
+      } else if (transition) {
+        add(new THREE.BoxGeometry(8, 1, 12));
       } else {
         // tapered main shaft: bigger at the base
         const t0 = (zTopI - s) / (H - s);

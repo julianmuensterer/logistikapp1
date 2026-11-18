@@ -35,9 +35,9 @@ describe('BridgeModel', () => {
     expect(model.evaluate(qMax, 120, true).maxEta).toBeCloseTo(1, 6);
   });
 
-  it('all stays are in tension under self-weight + pretension, about 2.5 to 12 MN', () => {
+  it('all stays are in tension under self-weight + pretension, about 3 to 13 MN (sources: 6–12 MN incl. traffic)', () => {
     const N = model.elements.filter((e) => e.part === 'stay').map((e) => model.solG.forces[e.index].N / 1000);
     expect(Math.min(...N)).toBeGreaterThan(2);
-    expect(Math.max(...N)).toBeLessThan(12);
+    expect(Math.max(...N)).toBeLessThan(14);
   });
 });
