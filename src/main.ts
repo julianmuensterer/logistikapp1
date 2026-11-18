@@ -221,6 +221,19 @@ function init(): void {
     applyScale();
   };
 
+  // mouse wheel on a slider changes its value (scroll up = more)
+  const wheelStep: Record<string, number> = { traffic: 0.2, wind: 5, scale: 2 };
+  for (const input of [inputs.traffic, inputs.wind, inputs.scale]) {
+    input.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      if (input.disabled) return;
+      const step = wheelStep[input.id] * (e.shiftKey ? 5 : 1);
+      const v = Number(input.value) + (e.deltaY < 0 ? step : -step);
+      input.value = String(Math.min(Number(input.max), Math.max(Number(input.min), Math.round(v * 10) / 10)));
+      input.dispatchEvent(new Event('input'));
+    }, { passive: false });
+  }
+
   // click on the bridge → learn card
   const ray = new THREE.Raycaster();
   let downAt = { x: 0, y: 0 };

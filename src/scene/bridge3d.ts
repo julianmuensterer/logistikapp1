@@ -13,6 +13,7 @@ const BASE_COLORS: Record<Part, string> = {
 };
 
 const UP = new THREE.Vector3(0, 1, 0);
+const FLIP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
 
 /** Utilization colour: green → yellow → red, dark red above 100 %. */
 export function etaColor(eta: number, target = new THREE.Color()): THREE.Color {
@@ -219,6 +220,13 @@ export function placeBetween(mesh: THREE.Object3D, a: THREE.Vector3, b: THREE.Ve
   const dir = new THREE.Vector3().subVectors(b, a);
   const len = dir.length();
   mesh.position.copy(a).addScaledVector(dir, 0.5);
-  mesh.quaternion.setFromUnitVectors(UP, dir.normalize());
+  dir.normalize();
+  if (dir.y >= 0) {
+    mesh.quaternion.setFromUnitVectors(UP, dir);
+  } else {
+    // Pointing downwards (piers): the shortest rotation from +Y to almost -Y is
+    // unstable and makes the mesh spin around its axis. Flip first, then tilt.
+    mesh.quaternion.setFromUnitVectors(UP, dir.negate()).multiply(FLIP);
+  }
   mesh.scale.set(1, Math.max(len, 1e-3), 1);
 }
