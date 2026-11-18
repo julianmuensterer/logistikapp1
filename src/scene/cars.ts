@@ -168,7 +168,7 @@ export class Cars {
     return this.count > 0;
   }
 
-  update(bridge: Bridge3D, scale: number, wind: number): void {
+  update(bridge: Bridge3D, scale: number): void {
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const e = new THREE.Euler();
@@ -187,7 +187,7 @@ export class Cars {
       if (along < 0) along += LOOP_EXACT;
       const x = along - APPROACH;
       const onBridge = x >= 0 && x <= BRIDGE_LENGTH;
-      if (onBridge) bridge.deckOffset(x, scale, wind, off);
+      if (onBridge) bridge.deckOffset(x, scale, off);
       else off.set(0, ROAD_TOP, 0);
       const pile = layer ? 1 : 0;
       p.set(x - BRIDGE_LENGTH / 2 + pile * (rand(i) - 0.5) * 3, off.y + layer * LEVEL_HEIGHT,

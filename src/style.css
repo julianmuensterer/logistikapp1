@@ -99,3 +99,26 @@ button.mini { padding: 1px 8px; font-size: 12px; box-shadow: 0 2px 0 var(--ink);
 #badge b { color: var(--accent); }
 label.mix { margin-top: 6px; font-weight: 400 !important; font-size: 13px; align-items: center; }
 label.mix select { font: inherit; border: 2px solid var(--ink); border-radius: 8px; padding: 2px 6px; background: var(--card); }
+
+#scene.scissors, #fem-svg.scissors { cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'><text x='2' y='26' font-size='26'>✂️</text></svg>") 8 16, crosshair; }
+.control.cut { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.control.cut .sub { flex-basis: 100%; }
+button.ghost { background: transparent; box-shadow: none; border-style: dashed; }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+#toast {
+  position: absolute; top: 56px; left: 50%; transform: translateX(-50%); background: var(--ink); color: white;
+  padding: 8px 14px; border-radius: 12px; font-weight: 700; animation: pop 0.2s ease-out;
+}
+#toast[hidden] { display: none; }
+.ticks { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+#matrix-info { width: 100%; border-collapse: collapse; font-size: 12px; margin: 6px 0; }
+#matrix-info th { text-align: right; color: var(--muted); font-weight: 700; }
+#matrix-info td { padding: 2px 0; border-top: 1px solid var(--line); }
+#matrix-info td + td { text-align: right; padding-left: 8px; }
+#compute-modes { margin: 8px 0 4px; }
+#modes-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+button.mode {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0 8px; text-align: left; font-weight: 400; font-size: 13px;
+  box-shadow: 0 2px 0 var(--ink); padding: 6px 10px;
+}
+button.mode.active { background: var(--accent-2); color: white; }

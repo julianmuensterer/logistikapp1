@@ -17,6 +17,7 @@ export class FemView {
     this.svg = svg;
     this.tip = tip;
     this.model = model;
+    svg.innerHTML = '';
     const yMin = -250, yMax = 95;
     svg.setAttribute('viewBox', `-20 ${-yMax} ${BRIDGE_LENGTH + 40} ${yMax - yMin}`);
     svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
@@ -46,20 +47,51 @@ export class FemView {
       nodesGroup.appendChild(c);
       return c;
     });
-    svg.addEventListener('mousemove', (ev) => this.hover(ev));
-    svg.addEventListener('mouseleave', () => (this.tip.style.display = 'none'));
+    // removed stays: dashed lines
+    for (const c of model.cutStayGeometry) {
+      const l = document.createElementNS(NS, 'line');
+      const a = v.nodes[c.deckNode], b = v.nodes[c.topNode];
+      l.setAttribute('x1', String(a.x)); l.setAttribute('y1', String(-a.y));
+      l.setAttribute('x2', String(b.x)); l.setAttribute('y2', String(-b.y));
+      l.setAttribute('stroke', '#ff7a59');
+      l.setAttribute('vector-effect', 'non-scaling-stroke');
+      l.style.strokeWidth = '1px';
+      l.setAttribute('stroke-dasharray', '3 3');
+      svg.appendChild(l);
+    }
+    this.onMove = (ev) => this.hover(ev);
+    this.onLeave = () => (this.tip.style.display = 'none');
+    this.onClick = (ev) => {
+      const idx = (ev.target as SVGElement).dataset?.element;
+      if (idx !== undefined) this.elementClick?.(Number(idx));
+    };
+    svg.addEventListener('mousemove', this.onMove);
+    svg.addEventListener('mouseleave', this.onLeave);
+    svg.addEventListener('click', this.onClick);
   }
 
   private nodeDots: SVGCircleElement[];
+  private onMove: (ev: MouseEvent) => void;
+  private onLeave: () => void;
+  private onClick: (ev: MouseEvent) => void;
+  /** called when an element is clicked (used by the scissors) */
+  elementClick?: (element: number) => void;
+
+  dispose(): void {
+    this.svg.removeEventListener('mousemove', this.onMove);
+    this.svg.removeEventListener('mouseleave', this.onLeave);
+    this.svg.removeEventListener('click', this.onClick);
+    this.tip.style.display = 'none';
+  }
 
   setForceText(fn: (element: number) => string): void {
     this.extraForces = fn;
   }
 
-  update(ev: Evaluation, scale: number): void {
+  update(ev: Evaluation, scale: number, disp: (dof: number) => number = ev.displacement): void {
     this.last = ev;
     const v = this.model.vertical;
-    const pos = v.nodes.map((n, k) => ({ x: n.x + ev.displacement(k * 3) * scale, y: n.y + ev.displacement(k * 3 + 1) * scale }));
+    const pos = v.nodes.map((n, k) => ({ x: n.x + disp(k * 3) * scale, y: n.y + disp(k * 3 + 1) * scale }));
     for (const e of this.model.elements) {
       const el = v.elements[e.index];
       const l = this.lines[e.index];
