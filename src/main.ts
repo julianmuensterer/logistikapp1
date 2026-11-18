@@ -21,7 +21,10 @@ const TONNES = (kN: number) => `${fmt(Math.round(kNtoTonnes(kN) / 10) * 10)} t`;
 // ---------- renderer, camera ----------
 const canvas = $<HTMLCanvasElement>('scene');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
-renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+/** phones and tablets: touch input, smaller screen, weaker GPU (desktop behaviour stays unchanged) */
+const TOUCH = window.matchMedia('(pointer: coarse)').matches;
+const PHONE_LAYOUT = window.matchMedia('(max-width: 820px), (max-height: 500px)');
+renderer.setPixelRatio(Math.min(TOUCH ? 1.5 : 2, window.devicePixelRatio));
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, 1, 1, 15000);
 const controls = new OrbitControls(camera, canvas);
@@ -58,6 +61,19 @@ function resize(): void {
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
+// layout changes on phones (rotation, collapsing the FE panel) do not always fire 'resize'
+new ResizeObserver(() => resize()).observe(canvas.parentElement!);
+// FE panel: collapsible on phones, starts collapsed there
+const femBox = $('fem');
+const setFemCollapsed = (c: boolean) => {
+  femBox.classList.toggle('collapsed', c);
+  $('fem-toggle').textContent = c ? 'FE model ▸' : 'FE model ▾';
+  $('fem-toggle').setAttribute('aria-expanded', String(!c));
+  resize();
+};
+$('fem-toggle').onclick = () => setFemCollapsed(!femBox.classList.contains('collapsed'));
+if (PHONE_LAYOUT.matches) setFemCollapsed(true);
+if (TOUCH) $('cut-help').textContent = 'Cut stay cables and watch the forces redistribute. Tap a cable to cut it.';
 resize();
 
 // ---------- tabs and learn cards ----------
@@ -292,7 +308,7 @@ function init(): void {
     canvas.classList.toggle('scissors', on);
     svg.classList.toggle('scissors', on);
     $('cut-mode').classList.toggle('active', on);
-    $('cut-mode').textContent = on ? '✂ Scissors on: click a cable' : '✂ Cut cables';
+    $('cut-mode').textContent = on ? `✂ Scissors on: ${TOUCH ? 'tap' : 'click'} a cable` : '✂ Cut cables';
     setHover(null);
   }
   $('cut-mode').onclick = () => setCutMode(!state.cutMode);
@@ -426,7 +442,7 @@ function init(): void {
     setHover(hit ? bridge.visuals.get(hit.object.userData.element)!.material : null);
   });
   canvas.addEventListener('click', (e) => {
-    if (Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 4) return; // was a drag
+    if (Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > (TOUCH ? 12 : 4)) return; // was a drag
     const hit = pick(e);
     if (!hit) return;
     if (state.cutMode) cutStay(hit.object.userData.element);
