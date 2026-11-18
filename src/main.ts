@@ -30,10 +30,10 @@ controls.maxPolarAngle = Math.PI * 0.95;
 createWorld(scene);
 
 const VIEWS: Record<string, { pos: [number, number, number]; target: [number, number, number] }> = {
-  overview: { pos: [-1250, 320, 1350], target: [-150, -110, 0] },
+  overview: { pos: [-1250, 320, 1350], target: [-150, -60, 0] },
   side: { pos: [0, -70, 2900], target: [0, -80, 0] },
   under: { pos: [-560, -170, 200], target: [-684, -10, 0] },
-  pylon: { pos: [90, 70, 170], target: [0, 35, 0] },
+  pylon: { pos: [150, 80, 290], target: [0, 42, 0] },
   driver: { pos: [-1235, 9, -7], target: [-900, 9, -7] },
 };
 function setView(name: string): void {
@@ -50,6 +50,11 @@ function resize(): void {
   const r = canvas.parentElement!.getBoundingClientRect();
   renderer.setSize(r.width, r.height, false);
   camera.aspect = r.width / r.height;
+  // The FE panel covers the bottom of the view: shift the image centre upwards so
+  // the camera target sits in the middle of the visible area above the panel.
+  const fem = document.getElementById('fem');
+  const covered = fem ? fem.offsetHeight + 12 : 0;
+  camera.setViewOffset(r.width, r.height, 0, covered / 2, r.width, r.height);
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
