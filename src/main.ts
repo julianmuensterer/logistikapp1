@@ -122,8 +122,8 @@ function init(): void {
     $('traffic-val').textContent = `${fmt(state.q, 1)} kN/m²`;
     const tonnes = kNtoTonnes(trafficTotal);
     $('traffic-sub').textContent = state.q > 0
-      ? `as heavy as ${fmt(Math.round(tonnes / 1.5))} cars (1.5 t) or ${fmt(Math.round(tonnes / 40))} trucks (40 t) or ${fmt(Math.round(tonnes / 60))} tanks (60 t). Shown: one layer of toy vehicles per kN/m².`
-      : 'Empty bridge. Shown: one layer of toy vehicles per kN/m².';
+      ? `as heavy as ${fmt(Math.round(tonnes / 1.5))} cars (1.5 t) or ${fmt(Math.round(tonnes / 40))} trucks (40 t) or ${fmt(Math.round(tonnes / 60))} tanks (60 t). Toy vehicles are shown by weight: 1 toy car = 5 cars (7.5 t), truck 40 t, tank 60 t.`
+      : 'Empty bridge. Toy vehicles are shown by weight: 1 toy car = 5 cars (7.5 t), truck 40 t, tank 60 t.';
     const pw = windPressure(state.wind);
     $('wind-val').textContent = `${fmt(state.wind)} km/h`;
     $('wind-sub').textContent = `pressure ${fmt(pw, 2)} kN/m² · lateral force on deck ${MN(pw * CD.deck * DECK_WIND_HEIGHT * BRIDGE_LENGTH)}`;

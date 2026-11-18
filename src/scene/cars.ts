@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BRIDGE_LENGTH } from '../fem/bridge';
+import { BRIDGE_LENGTH, G_ACC, TRAFFIC_WIDTH } from '../fem/bridge';
 import { toon } from './world';
 import type { Bridge3D } from './bridge3d';
 
@@ -15,10 +15,7 @@ const LOOP = BRIDGE_LENGTH + 2 * APPROACH;
 const SLOTS_PER_LANE = Math.floor(LOOP / SLOT_SPACING);
 const LOOP_EXACT = SLOTS_PER_LANE * SLOT_SPACING;
 export const SLOTS_PER_LAYER = SLOTS_PER_LANE * LANES.length;
-/** One full layer of toy vehicles represents 1 kN/m² of traffic area load. */
-export const VEHICLES_PER_KN_M2 = SLOTS_PER_LAYER;
 export const MAX_Q = 25;
-const MAX_VEHICLES = Math.ceil(MAX_Q * VEHICLES_PER_KN_M2);
 const ROAD_TOP = -0.5; // top of the approach roads
 
 const rand = (k: number) => {
@@ -36,7 +33,7 @@ interface Part {
 interface VehicleType {
   id: VehicleKind;
   label: string;
-  /** real mass of the vehicle it represents [t] (for the info text only) */
+  /** mass one toy vehicle stands for [t]; the number shown follows from the load */
   tonnes: number;
   palette: string[];
   parts: Part[];
@@ -48,7 +45,7 @@ const box = (l: number, h: number, w: number, x: number, y: number, z = 0) =>
 
 const VEHICLES: VehicleType[] = [
   {
-    id: 'car', label: 'car', tonnes: 1.5,
+    id: 'car', label: 'toy car (= 5 cars)', tonnes: 7.5,
     palette: ['#ff6b6b', '#4dabf7', '#ffd43b', '#69db7c', '#b197fc', '#ffa94d', '#f783ac', '#38d9a9'],
     parts: [
       { geo: box(9, 2.2, 4, 0, 1.6), color: '#ffffff', tinted: true },
@@ -78,6 +75,10 @@ const VEHICLES: VehicleType[] = [
   },
 ];
 
+/** Load on the bridge in tonnes for an area load q, scaled to the whole driving loop. */
+const loopTonnes = (q: number) => (q * TRAFFIC_WIDTH * LOOP) / G_ACC;
+const MAX_VEHICLES = Math.ceil(loopTonnes(MAX_Q) / Math.min(...VEHICLES.map((v) => v.tonnes))) + 1;
+
 export const VEHICLE_MIXES: Record<string, { label: string; weights: Record<VehicleKind, number> }> = {
   mixed: { label: 'Mixed traffic', weights: { car: 0.6, truck: 0.3, tank: 0.1 } },
   car: { label: 'Cars only', weights: { car: 1, truck: 0, tank: 0 } },
@@ -94,6 +95,9 @@ export class Cars {
   private order: number[];
   private count = 0;
   private kinds = new Uint8Array(MAX_VEHICLES);
+  /** cumulative mass of the first i vehicles [t] */
+  private cumulative = new Float64Array(MAX_VEHICLES + 1);
+  private q = 0;
   /** distance travelled per lane [m], grows continuously (no jumps) */
   private travelled = LANES.map(() => 0);
 
@@ -125,11 +129,26 @@ export class Cars {
     for (let i = 0; i < MAX_VEHICLES; i++) {
       const r = rand(i + 4242);
       this.kinds[i] = r < w.car ? 0 : r < w.car + w.truck ? 1 : 2;
+      this.cumulative[i + 1] = this.cumulative[i] + VEHICLES[this.kinds[i]].tonnes;
     }
+    this.setLoad(this.q);
   }
 
+  /**
+   * Heavier vehicles → fewer of them: show as many vehicles as needed so that their
+   * total mass equals the traffic load (1 kN/m² ≈ 6,000 t on the bridge).
+   */
   setLoad(q: number): void {
-    this.count = Math.min(MAX_VEHICLES, Math.round(q * VEHICLES_PER_KN_M2));
+    this.q = q;
+    const target = loopTonnes(q);
+    let lo = 0, hi = MAX_VEHICLES;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (this.cumulative[mid] <= target + 1e-9) lo = mid; else hi = mid - 1;
+    }
+    // round to the nearest vehicle
+    if (lo < MAX_VEHICLES && target - this.cumulative[lo] > this.cumulative[lo + 1] - target) lo++;
+    this.count = lo;
   }
 
   /** Number of vehicles of each kind currently shown. */
