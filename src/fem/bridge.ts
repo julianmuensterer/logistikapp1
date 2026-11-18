@@ -14,7 +14,7 @@
  *
  * All section properties are rounded teaching values, not design data.
  */
-import { Frame2D, type ElementLoad, type Solution } from './frame2d';
+import { Frame2D, type ElementLoad, type NodalLoad, type Solution } from './frame2d';
 import { lowestModes, type Mode } from './modal';
 
 // ---------- Geometry (real values, rounded) ----------
@@ -39,11 +39,16 @@ export const STAYS_PER_SIDE = 11;
 /** Horizontal distance of stay anchor k from its pylon [m]. */
 export const stayAnchorOffset = (k: number) => 30 + 12.5 * k;
 /** Height of stay anchor k on the pylon above the deck [m]. */
-export const stayPylonHeight = (k: number) => 55 + 3 * k;
+export const stayPylonHeight = (k: number) => 40 + 3 * k;
+/** The pylon stands on the deck with two inverted-Y legs, 38.5 m high, spread ±9 m at the deck. */
+export const PYLON_LEG_HEIGHT = 38.5;
+export const PYLON_LEG_SPREAD = 5.5;
+/** The split upper part of a pier consists of two shafts at ±5.5 m, right below the pylon legs. */
+export const PIER_SHAFT_SPREAD = 5.5;
 /** Number of 150 mm² strands in stay k (real: 55 to 91 strands). */
 export const stayStrands = (k: number) => Math.round(55 + (36 * k) / (STAYS_PER_SIDE - 1));
-/** Length of the split upper part of a pier [m]. */
-export const splitLength = (H: number) => Math.min(90, 0.4 * H);
+/** Length of the split upper part of a pier [m] (90 m; P7 is split over its full height). */
+export const splitLength = (H: number) => Math.min(90, H);
 
 // ---------- Materials ----------
 export const STEEL = { E: 210e6, fy: 355e3, gamma: 78.5 }; // kN/m², kN/m², kN/m³
@@ -54,7 +59,10 @@ export const CONCRETE = { E: 38e6, fck: 60e3, gamma: 25 };
 export const SECTIONS = {
   deck: { A: 1.5, I: 4.5, W: 1.8, Iz: 70, Wz: 4.4 },
   pylon: { A: 1.0, I: 20, W: 4, Wtr: 1.5 },
-  pierLower: { A: 55, I: 2500, W: 300, Itr: 4000, Wtr: 350, windWidth: 17 },
+  /** one of the two inverted-Y legs */
+  pylonLeg: { A: 0.6, I: 4, W: 1.2, Wtr: 0.9 },
+  pierLower: { A: 80, I: 2500, W: 300, Itr: 4000, Wtr: 350, windWidth: 17 },
+  /** both shafts of the split part together (each shaft has half of A, I and W) */
   pierSplit: { A: 30, I: 80, W: 40, Itr: 600, Wtr: 110, windWidth: 12 },
 };
 
@@ -89,8 +97,8 @@ export interface ModelElement {
   label: string;
   /** For stays: pylon number (0-based), side (-1 left, +1 right) and stay number k */
   stay?: { pylon: number; side: -1 | 1; k: number };
-  pier?: { pier: number; zTopI: number; zTopJ: number; split: boolean };
-  pylon?: { pylon: number; hI: number; hJ: number };
+  pier?: { pier: number; zTopI: number; zTopJ: number; split: boolean; shaft?: -1 | 1; transition?: boolean };
+  pylon?: { pylon: number; hI: number; hJ: number; leg?: boolean };
   deckIndex?: number; // element index in the lateral model
 }
 
@@ -99,6 +107,8 @@ interface CheckPoint {
   where: 'i' | 'm' | 'j';
   /** stress per unit load case, for the two extreme fibres (+W and -W side) */
   sG: [number, number];
+  /** part of sG caused by the stay pretension */
+  sP: [number, number];
   sQ: [number, number];
   /** lateral stress magnitude per kN/m² wind pressure */
   sW: number;
@@ -126,8 +136,12 @@ export class BridgeModel {
   pylonTopNodes: number[] = [];
   solG!: Solution;
   solQ!: Solution;
+  /** pretension alone (part of solG); factored with γP = 1.0 instead of γG */
+  solP!: Solution;
   solW!: Solution;
   checks: CheckPoint[] = [];
+  /** stay pretension force per stay element [kN] */
+  stayPretension = new Map<number, number>();
   /** lateral reactions at the piers per unit wind pressure (deck only) [kN] */
   pierReactionW: number[] = [];
 
@@ -214,6 +228,7 @@ export class BridgeModel {
     const m = this.vertical;
     // --- deck node positions: abutments, piers, stay anchors, max 15 m apart
     const xs = new Set<number>([0, BRIDGE_LENGTH, ...PIER_X]);
+    for (const xp of PIER_X) xs.add(xp - PYLON_LEG_SPREAD).add(xp + PYLON_LEG_SPREAD).add(xp - PIER_SHAFT_SPREAD).add(xp + PIER_SHAFT_SPREAD);
     for (const xp of PIER_X)
       for (let k = 0; k < STAYS_PER_SIDE; k++) {
         xs.add(xp - stayAnchorOffset(k));
@@ -247,19 +262,28 @@ export class BridgeModel {
     m.supports.push({ node: this.deckNodes[this.deckNodes.length - 1], uy: true });
 
     PIER_X.forEach((xp, p) => {
-      const deckNode = nodeAtX.get(xp)!;
       // --- pylon
-      const base = [0, 20, 40];
+      const base = [PYLON_LEG_HEIGHT];
       for (let k = 0; k < STAYS_PER_SIDE; k++) base.push(stayPylonHeight(k));
       base.push(PYLON_HEIGHT);
       // refine long pylon elements (below the lowest stay anchor) to the mesh size
-      const heights = [0];
+      const heights = [PYLON_LEG_HEIGHT];
       for (let t = 1; t < base.length; t++) {
         const parts = Math.max(1, Math.ceil((base[t] - base[t - 1]) / this.meshSize - 1e-9));
         for (let q = 1; q <= parts; q++) heights.push(base[t - 1] + ((base[t] - base[t - 1]) * q) / parts);
       }
       const anchorIndex = (k: number) => heights.findIndex((h) => Math.abs(h - stayPylonHeight(k)) < 1e-6);
-      const pyNodes = [deckNode];
+      const legTop = m.addNode(xp, PYLON_LEG_HEIGHT);
+      for (const side of [-1, 1]) {
+        const foot = nodeAtX.get(xp + side * PYLON_LEG_SPREAD)!;
+        const ls = SECTIONS.pylonLeg;
+        const idx = m.addElement({ type: 'beam', i: foot, j: legTop, E: STEEL.E, A: ls.A, I: ls.I });
+        this.elements.push({
+          index: idx, part: 'pylon', label: `Pylon P${p + 1}, ${side < 0 ? 'west' : 'east'} leg`,
+          pylon: { pylon: p, hI: 0, hJ: PYLON_LEG_HEIGHT, leg: true },
+        });
+      }
+      const pyNodes = [legTop];
       for (const h of heights.slice(1)) pyNodes.push(m.addNode(xp, h));
       this.pylonTopNodes.push(pyNodes[pyNodes.length - 1]);
       const ps = SECTIONS.pylon;
@@ -290,22 +314,50 @@ export class BridgeModel {
       const H = PIER_HEIGHTS[p];
       const s = splitLength(H);
       const nSplit = Math.max(3, Math.ceil(s / this.meshSize - 1e-9));
-      const nLower = Math.max(5, Math.ceil((H - s) / this.meshSize - 1e-9));
-      const zs = [0];
-      for (let t = 1; t <= nSplit; t++) zs.push((s * t) / nSplit);
-      for (let t = 1; t <= nLower; t++) zs.push(s + ((H - s) * t) / nLower);
-      const pierNodes = [deckNode];
-      for (const z of zs.slice(1)) pierNodes.push(m.addNode(xp, -z));
-      for (let t = 0; t < pierNodes.length - 1; t++) {
-        const split = zs[t + 1] <= s + 1e-6;
-        const sec = split ? SECTIONS.pierSplit : SECTIONS.pierLower;
-        const idx = m.addElement({ type: 'beam', i: pierNodes[t], j: pierNodes[t + 1], E: CONCRETE.E, A: sec.A, I: sec.I });
-        this.elements.push({
-          index: idx, part: 'pier', label: `Pier P${p + 1}, ${split ? 'split upper legs' : 'main shaft'}, ${zs[t].toFixed(0)}–${zs[t + 1].toFixed(0)} m below deck`,
-          pier: { pier: p, zTopI: zs[t], zTopJ: zs[t + 1], split },
-        });
+      const nLower = H - s < 1e-6 ? 0 : Math.max(5, Math.ceil((H - s) / this.meshSize - 1e-9));
+      const label = (what: string, z0: number, z1: number) => `Pier P${p + 1}, ${what}, ${z0.toFixed(0)}–${z1.toFixed(0)} m below deck`;
+      // twin shafts of the split part, each with half of the split section
+      const sp = SECTIONS.pierSplit;
+      const shaftBottoms: number[] = [];
+      for (const side of [-1, 1] as const) {
+        const x = xp + side * PIER_SHAFT_SPREAD;
+        let prev = nodeAtX.get(x)!;
+        for (let t = 1; t <= nSplit; t++) {
+          const z0 = (s * (t - 1)) / nSplit, z1 = (s * t) / nSplit;
+          const node = m.addNode(x, -z1);
+          // the deck rests on spherical bearings on the shaft heads: moment hinge at the top
+          const idx = m.addElement({ type: 'beam', i: prev, j: node, E: CONCRETE.E, A: sp.A / 2, I: sp.I / 2, hingeI: t === 1 });
+          this.elements.push({
+            index: idx, part: 'pier', label: label(`${side < 0 ? 'west' : 'east'} shaft`, z0, z1),
+            pier: { pier: p, zTopI: z0, zTopJ: z1, split: true, shaft: side },
+          });
+          prev = node;
+        }
+        shaftBottoms.push(prev);
       }
-      m.supports.push({ node: pierNodes[pierNodes.length - 1], ux: true, uy: true, rz: true });
+      if (nLower === 0) {
+        for (const node of shaftBottoms) m.supports.push({ node, ux: true, uy: true, rz: true });
+      } else {
+        // transition zone: both shafts join the single main shaft
+        const join = m.addNode(xp, -s);
+        for (const [t, node] of shaftBottoms.entries()) {
+          const idx = m.addElement({ type: 'beam', i: node, j: join, E: CONCRETE.E, A: 20, I: 200 });
+          this.elements.push({
+            index: idx, part: 'pier', label: `Pier P${p + 1}, transition to the main shaft (${t === 0 ? 'west' : 'east'})`,
+            pier: { pier: p, zTopI: s, zTopJ: s, split: false, transition: true },
+          });
+        }
+        let prev = join;
+        const lo = SECTIONS.pierLower;
+        for (let t = 1; t <= nLower; t++) {
+          const z0 = s + ((H - s) * (t - 1)) / nLower, z1 = s + ((H - s) * t) / nLower;
+          const node = m.addNode(xp, -z1);
+          const idx = m.addElement({ type: 'beam', i: prev, j: node, E: CONCRETE.E, A: lo.A, I: lo.I });
+          this.elements.push({ index: idx, part: 'pier', label: label('main shaft', z0, z1), pier: { pier: p, zTopI: z0, zTopJ: z1, split: false } });
+          prev = node;
+        }
+        m.supports.push({ node: prev, ux: true, uy: true, rz: true });
+      }
     });
   }
 
@@ -336,21 +388,34 @@ export class BridgeModel {
     this.lineWeight = new Array(v.elements.length).fill(0);
     for (const e of this.elements) {
       if (e.part === 'deck') this.lineWeight[e.index] = DECK_DEAD_LOAD;
-      if (e.part === 'pylon') this.lineWeight[e.index] = PYLON_DEAD_LOAD;
-      if (e.part === 'pier') this.lineWeight[e.index] = (e.pier!.split ? SECTIONS.pierSplit : SECTIONS.pierLower).A * CONCRETE.gamma;
+      if (e.part === 'pylon') this.lineWeight[e.index] = e.pylon!.leg ? PYLON_DEAD_LOAD / 2 : PYLON_DEAD_LOAD;
+      if (e.part === 'pier')
+        this.lineWeight[e.index] = e.pier!.transition ? 0 : (e.pier!.split ? SECTIONS.pierSplit.A / 2 : SECTIONS.pierLower.A) * CONCRETE.gamma;
     }
     const g: ElementLoad[] = this.elements
       .filter((e) => this.lineWeight[e.index] > 0)
       .map((e) => ({ element: e.index, qx: 0, qy: -this.lineWeight[e.index] }));
-    // Self-weight: the real stays are pre-tensioned so that the deck sits in its target
-    // shape. We mimic this by solving the dead-load case with very stiff stays.
-    const stays = this.elements.filter((e) => e.part === 'stay').map((e) => v.elements[e.index]);
-    const originalA = stays.map((s) => s.A);
-    stays.forEach((s) => (s.A *= 50));
-    v.invalidate();
-    [this.solG] = v.solve([{ distributed: g }]);
-    stays.forEach((s, t) => (s.A = originalA[t]));
-    v.invalidate();
+    // Self-weight + stay pretension (G+PT). The real stays are tensioned so that the deck
+    // sits in its target shape. Pretension forces follow from the classic "rigid supports"
+    // method: the deck is solved as a continuous beam on rigid supports at every stay
+    // anchor; the anchor reactions are the vertical components of the stay forces. Both
+    // stays of a pair get the same force, so the pylons are balanced under dead load.
+    this.stayPretension = this.computePretension();
+    const pt: NodalLoad[] = [];
+    for (const e of this.elements) {
+      if (e.part !== 'stay') continue;
+      const el = v.elements[e.index];
+      const T = this.stayPretension.get(e.index)!;
+      const { c, s } = v.geometry(el); // unit vector i (deck anchor) -> j (pylon)
+      // the shortened stay pulls the anchor towards the pylon and the pylon towards the anchor
+      pt.push({ node: el.i, fx: T * c, fy: T * s }, { node: el.j, fx: -T * c, fy: -T * s });
+    }
+    [this.solG, this.solP] = v.solve([{ distributed: g, nodal: pt }, { nodal: pt }]);
+    // element force = elastic part + pretension
+    for (const [idx, T] of this.stayPretension) {
+      this.solG.forces[idx].N += T;
+      this.solP.forces[idx].N += T;
+    }
     [this.solQ] = v.solve([{ distributed: deckLoads(TRAFFIC_WIDTH * 1) }]);
     // Lateral: unit wind pressure on the deck
     const w = CD.deck * DECK_WIND_HEIGHT;
@@ -360,6 +425,32 @@ export class BridgeModel {
       const t = lat.nodes.findIndex((n) => Math.abs(n.x - xp) < 1e-6);
       return Math.abs(this.solW.reactions[t * 3 + 1]);
     });
+  }
+
+  /**
+   * Stay pretension from the deck dead load: every stay lifts the deck weight of its
+   * tributary length (half the distance to the neighbouring anchors; the 30 m next to a
+   * pier are counted like a regular 12.5 m spacing, the pier carries the rest). Both
+   * stays of a pair get the same force, so the pylons are balanced under dead load.
+   */
+  private computePretension(): Map<number, number> {
+    const last = STAYS_PER_SIDE - 1;
+    // free ends of the outermost stays' tributary lengths: abutments and outermost anchors
+    const limits = [0, BRIDGE_LENGTH];
+    PIER_X.forEach((xp) => limits.push(xp - stayAnchorOffset(last), xp + stayAnchorOffset(last)));
+    const outward = (x: number, side: number) =>
+      Math.min(...limits.filter((o) => (o - x) * side > 1e-6).map((o) => Math.abs(o - x))) / 2;
+    const out = new Map<number, number>();
+    for (const e of this.elements) {
+      if (e.part !== 'stay') continue;
+      const { pylon, k } = e.stay!;
+      const xp = PIER_X[pylon], a = stayAnchorOffset(k);
+      const len = (side: number) => 6.25 + (k < last ? 6.25 : outward(xp + side * a, side));
+      const L = (len(-1) + len(1)) / 2;
+      const sinA = stayPylonHeight(k) / Math.hypot(stayPylonHeight(k), a);
+      out.set(e.index, (DECK_DEAD_LOAD * L) / sinA);
+    }
+    return out;
   }
 
   /** Lateral moment in a pier at depth z below the deck per unit wind pressure [kNm]. */
@@ -379,10 +470,11 @@ export class BridgeModel {
     const sec = SECTIONS;
     for (const e of this.elements) {
       const fG = this.solG.forces[e.index];
+      const fP = this.solP.forces[e.index];
       const fQ = this.solQ.forces[e.index];
       if (e.part === 'stay') {
         const A = this.vertical.elements[e.index].A;
-        this.checks.push({ element: e.index, where: 'm', sG: [fG.N / A, fG.N / A], sQ: [fQ.N / A, fQ.N / A], sW: 0, material: 'strand', tensionOnly: true });
+        this.checks.push({ element: e.index, where: 'm', sG: [fG.N / A, fG.N / A], sP: [fP.N / A, fP.N / A], sQ: [fQ.N / A, fQ.N / A], sW: 0, material: 'strand', tensionOnly: true });
         continue;
       }
       let A: number, W: number;
@@ -393,23 +485,29 @@ export class BridgeModel {
         const fw = this.solW.forces[e.deckIndex!];
         lat = (wh) => Math.abs(wh === 'i' ? fw.Mi : wh === 'j' ? fw.Mj : fw.Mm) / sec.deck.Wz;
       } else if (e.part === 'pylon') {
-        A = sec.pylon.A; W = sec.pylon.W;
-        const { hI, hJ } = e.pylon!;
+        const { hI, hJ, leg } = e.pylon!;
+        const ps = leg ? sec.pylonLeg : sec.pylon;
+        A = ps.A; W = ps.W;
         const w = CD.pylon * PYLON_WIND_WIDTH;
-        const m = (h: number) => (w * (PYLON_HEIGHT - h) ** 2) / 2 / sec.pylon.Wtr;
+        // transverse wind moment; below the leg junction it is shared by the two legs
+        const m = (h: number) => (w * (PYLON_HEIGHT - h) ** 2) / 2 / ps.Wtr / (leg ? 2 : 1);
         lat = (wh) => m(wh === 'i' ? hI : wh === 'j' ? hJ : (hI + hJ) / 2);
       } else {
+        if (e.pier!.transition) continue; // stiff stand-in for the 8 m transition zone, not checked
         const ps = e.pier!.split ? sec.pierSplit : sec.pierLower;
-        A = ps.A; W = ps.W; material = 'concrete';
+        const share = e.pier!.split ? 2 : 1; // each twin shaft has half of the split section
+        A = ps.A / share; W = ps.W / share; material = 'concrete';
         const { pier, zTopI, zTopJ } = e.pier!;
         lat = (wh) => this.pierLateralMoment(pier, wh === 'i' ? zTopI : wh === 'j' ? zTopJ : (zTopI + zTopJ) / 2) / ps.Wtr;
       }
       for (const where of ['i', 'm', 'j'] as const) {
         const MG = where === 'i' ? fG.Mi : where === 'j' ? fG.Mj : fG.Mm;
         const MQ = where === 'i' ? fQ.Mi : where === 'j' ? fQ.Mj : fQ.Mm;
+        const MP = where === 'i' ? fP.Mi : where === 'j' ? fP.Mj : fP.Mm;
         this.checks.push({
           element: e.index, where,
           sG: [fG.N / A + MG / W, fG.N / A - MG / W],
+          sP: [fP.N / A + MP / W, fP.N / A - MP / W],
           sQ: [fQ.N / A + MQ / W, fQ.N / A - MQ / W],
           sW: lat(where), material, tensionOnly: false,
         });
@@ -435,7 +533,8 @@ export class BridgeModel {
       const fs = this.strength(c.material, safety);
       const C = f.W * pw * c.sW;
       for (let side = 0; side < 2; side++) {
-        const a = f.G * c.sG[side];
+        // permanent: γG on self-weight, γP = 1.0 on the stay pretension
+        const a = f.G * (c.sG[side] - c.sP[side]) + c.sP[side];
         const b = f.Q * c.sQ[side];
         let s: number, lam: number;
         if (c.tensionOnly) {

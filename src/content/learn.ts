@@ -33,7 +33,8 @@ export const LEARN_CARDS: LearnCard[] = [
       tensile strength f<sub>uk</sub> = 1,860 MPa). The longest stay is about 180 m.</p>
       <p><b>Role in the load path:</b> elastic supports for the deck; they pull the deck up towards the pylon tops.</p>
       <p><b>FE model:</b> truss elements (axial force only). In the real bridge the stays are pre-tensioned so that the
-      deck reaches its target shape under self-weight; the model mimics this with stiff stays for the self-weight case.</p>`,
+      deck reaches its target shape under self-weight. The model applies a pretension force to every stay that lifts the deck weight of its
+      tributary length (12.5 m between anchors, more for the outermost stays), and the self-weight case is solved together with it (G+PT).</p>`,
   },
   {
     id: 'pylon',
@@ -42,7 +43,9 @@ export const LEARN_CARDS: LearnCard[] = [
       about 4,600 t (S355 / S460).</p>
       <p><b>Role in the load path:</b> collect the stay forces. The horizontal components of the stays on both sides
       balance each other; the vertical components go down into the pier as compression.</p>
-      <p><b>FE model:</b> beam elements rigidly connected to the deck.</p>`,
+      <p><b>FE model:</b> two inclined leg elements (the inverted Y, 38.5 m high) stand on the deck right above the twin pier
+      shafts; above them the mast is a column of beam elements. The stays are anchored between 40 and 70 m above the deck,
+      the top 17 m of the pylon carry no stays.</p>`,
   },
   {
     id: 'pier',
@@ -53,7 +56,9 @@ export const LEARN_CARDS: LearnCard[] = [
       <p>The upper ~90 m of each pier are <b>split into two thinner legs</b>. This makes the piers flexible in the
       longitudinal direction, so the 2.5 km long deck can expand with temperature without large restraint forces,
       while the piers stay stiff in the transverse direction against wind.</p>
-      <p><b>FE model:</b> beam elements clamped at the foundation; laterally they act as springs supporting the deck.</p>`,
+      <p><b>FE model:</b> beam elements clamped at the foundation. The split part is modelled as two shafts 11 m apart;
+      the deck rests on spherical bearings on top of them, so the connection is a <b>moment hinge</b> (static condensation
+      of the end rotation). Laterally the piers act as springs supporting the deck.</p>`,
   },
   {
     id: 'loads',
@@ -65,7 +70,7 @@ export const LEARN_CARDS: LearnCard[] = [
       <p><b>Solution:</b> two plane frame models (elevation and plan) are assembled into K u = f and solved with a Cholesky
       factorisation. Because the model is linear, the tolerable traffic load is found by scaling the unit traffic case
       until the first element reaches 100 % utilisation.</p>
-      <p><b>Partial safety factors</b> (toggle): γ<sub>G</sub> = 1.35, γ<sub>Q</sub> = 1.5, γ<sub>W</sub> = 1.5,
+      <p><b>Partial safety factors</b> (toggle): γ<sub>G</sub> = 1.35, γ<sub>P</sub> = 1.0 (stay pretension), γ<sub>Q</sub> = 1.5, γ<sub>W</sub> = 1.5,
       γ<sub>M0</sub> = 1.0 (steel), γ<sub>M</sub> = 1.5 (strands), γ<sub>c</sub> = 1.5 with α<sub>cc</sub> = 0.85 (concrete).</p>
       <p class="hint">Simplified teaching model. The real bridge is far safer than this game.</p>`,
   },
@@ -78,6 +83,11 @@ export const LEARN_CARDS: LearnCard[] = [
       <li><a href="https://en.dillinger.de/app/uploads/2024/03/20160211043536-millau_e.pdf" target="_blank" rel="noopener">Dillinger: heavy plate for the Viaduc de Millau (PDF)</a></li>
       <li><a href="https://roadtraffic-technology.com/projects/millau_viaduct" target="_blank" rel="noopener">Road Traffic Technology: Millau Viaduct</a></li>
       <li><a href="https://www.fzt.haw-hamburg.de/pers/Scholz/dglr/hh/text_2010_10_28_Millau_Viaduct.pdf" target="_blank" rel="noopener">HAW Hamburg / DGLR: Millau Viaduct (PDF)</a></li>
+      <li><a href="https://www.afgc.asso.fr/app/uploads/2018/05/Servant.pdf" target="_blank" rel="noopener">AFGC, Servant: Le viaduc de Millau (PDF)</a></li>
+      <li><a href="https://www.afgc.asso.fr/app/uploads/2018/05/104-Hajar.pdf" target="_blank" rel="noopener">AFGC, Hajar et al.: piers and foundations (PDF)</a></li>
+      <li><a href="https://www.afgc.asso.fr/app/uploads/2018/05/106-de-Ville.pdf" target="_blank" rel="noopener">AFGC, de Ville et al.: pier analysis, frequencies (PDF)</a></li>
+      <li><a href="https://afgc.asso.fr/app/uploads/2009/12/08-Haubans-viaduc-de-Millau.pdf" target="_blank" rel="noopener">AFGC: stay cables of the Millau viaduct (PDF)</a></li>
+      <li><a href="https://enr.com/articles/37148-multispan-cable-stayed-crossing-is-high-level-landmark" target="_blank" rel="noopener">ENR: multispan cable-stayed crossing (2004)</a></li>
     </ul>`,
   },
 ];

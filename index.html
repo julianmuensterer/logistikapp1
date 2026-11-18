@@ -12,6 +12,12 @@
       <div id="viewport">
         <canvas id="scene"></canvas>
         <div id="badge">Stylized model · not a design tool · <b id="badge-scale">deformations exaggerated ×20</b></div>
+        <div id="hud">
+          <div class="hud-row"><span class="hud-label">Utilisation</span><div class="bar"><div id="hud-eta-bar"></div><span id="hud-eta-val"></span></div></div>
+          <div class="hud-sub" id="hud-eta-el"></div>
+          <div class="hud-row"><span class="hud-label">Load / limit</span><div class="bar"><div id="hud-load-bar"></div><span id="hud-load-val"></span></div></div>
+          <div class="hud-sub" id="hud-load-sub"></div>
+        </div>
         <div id="views">
           <button data-view="overview" class="active">Overview</button>
           <button data-view="side">Side</button>

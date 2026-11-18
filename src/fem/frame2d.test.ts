@@ -82,4 +82,17 @@ describe('modal analysis', () => {
     expect(m1.f).toBeCloseTo(f1, 2);
     expect(m2.f / f2).toBeCloseTo(1, 2);
   });
+
+  it('a moment hinge turns a fixed-fixed beam into a propped cantilever', () => {
+    const f = new Frame2D();
+    const L = 10, q = 12;
+    const a = f.addNode(0, 0), b = f.addNode(L, 0), c = f.addNode(L + 5, 0);
+    f.addElement({ type: 'beam', i: a, j: b, E, A: 1, I: 1e-3, hingeJ: true });
+    f.addElement({ type: 'beam', i: b, j: c, E, A: 1, I: 1e-3 });
+    f.supports.push({ node: a, ux: true, uy: true, rz: true }, { node: b, uy: true }, { node: c, uy: true });
+    const [sol] = f.solve([{ distributed: [{ element: 0, qx: 0, qy: -q }] }]);
+    expect(sol.forces[0].Mj).toBeCloseTo(0, 6);
+    expect(sol.forces[0].Mi).toBeCloseTo((-q * L * L) / 8, 4);
+    expect(sol.forces[1].Mi).toBeCloseTo(0, 6);
+  });
 });

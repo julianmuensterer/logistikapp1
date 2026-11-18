@@ -23,6 +23,9 @@ export interface Element2D {
   E: number; // Young's modulus [kN/m²]
   A: number; // area [m²]
   I: number; // second moment of area [m⁴] (ignored for trusses)
+  /** moment hinge at end i / end j (beam only), e.g. a bearing */
+  hingeI?: boolean;
+  hingeJ?: boolean;
 }
 
 export interface Support {
@@ -120,8 +123,23 @@ export class Frame2D {
       set(2, 1, b); set(2, 2, c); set(2, 4, -b); set(2, 5, d);
       set(4, 1, -a); set(4, 2, -b); set(4, 4, a); set(4, 5, -b);
       set(5, 1, b); set(5, 2, d); set(5, 4, -b); set(5, 5, c);
+      // moment hinges: static condensation of the released rotation
+      for (const r of Frame2D.released(e)) {
+        const krr = k[r * 6 + r];
+        const row = k.slice(r * 6, r * 6 + 6);
+        const col = [0, 1, 2, 3, 4, 5].map((q) => k[q * 6 + r]);
+        for (let q = 0; q < 6; q++) for (let t = 0; t < 6; t++) k[q * 6 + t] -= (col[q] * row[t]) / krr;
+      }
     }
     return k;
+  }
+
+  /** local DOF indices of released end rotations */
+  static released(e: Element2D): number[] {
+    const r: number[] = [];
+    if (e.type === 'beam' && e.hingeI) r.push(2);
+    if (e.type === 'beam' && e.hingeJ) r.push(5);
+    return r;
   }
 
   /** Transformation matrix T (6x6) so that u_local = T u_global. */
@@ -171,6 +189,14 @@ export class Frame2D {
       f[2] = (py * L * L) / 12;
       f[4] = (py * L) / 2;
       f[5] = (-py * L * L) / 12;
+      // a hinge redistributes its fixed-end moment (propped cantilever / simple beam)
+      if (e.hingeI && e.hingeJ) {
+        f[2] = 0; f[5] = 0;
+      } else if (e.hingeJ) {
+        f[1] = (5 * py * L) / 8; f[2] = (py * L * L) / 8; f[4] = (3 * py * L) / 8; f[5] = 0;
+      } else if (e.hingeI) {
+        f[1] = (3 * py * L) / 8; f[2] = 0; f[4] = (5 * py * L) / 8; f[5] = (-py * L * L) / 8;
+      }
     } else {
       f[1] = (py * L) / 2;
       f[4] = (py * L) / 2;
