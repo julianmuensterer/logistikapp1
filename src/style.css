@@ -95,3 +95,5 @@ button.active { background: var(--accent); color: white; }
 .hint { color: var(--muted); font-style: italic; }
 .sources { padding-left: 18px; font-size: 13px; }
 a { color: var(--accent-2); }
+button.mini { padding: 1px 8px; font-size: 12px; box-shadow: 0 2px 0 var(--ink); margin-left: 6px; }
+#badge b { color: var(--accent); }

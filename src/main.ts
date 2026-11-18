@@ -143,6 +143,8 @@ function init(): void {
     });
     $('defl').textContent = `${fmt(maxDefl, 2)} m`;
     $('drift').textContent = `${fmt(maxDrift, 2)} m`;
+    const p2 = model.lateral.nodes.findIndex((n) => Math.abs(n.x - PIER_X[1]) < 1e-6);
+    $('pier-drift').textContent = `${fmt(model.lateralDisplacement(p2, state.wind) * 100, 1)} cm`;
 
     bridge.update(ev.displacement, ev.eta, state.scale, state.wind, state.colors);
     cars.setLoad(state.q);
@@ -206,10 +208,17 @@ function init(): void {
   inputs.wind.oninput = () => { state.wind = Number(inputs.wind.value); recompute(); };
   inputs.safety.onchange = () => { state.safety = inputs.safety.checked; recompute(); };
   inputs.colors.onchange = () => { state.colors = inputs.colors.checked; recompute(); };
-  inputs.scale.oninput = () => {
+  const applyScale = () => {
     state.scale = Number(inputs.scale.value);
     $('scale-val').textContent = inputs.scale.value;
+    $('badge-scale').textContent = state.scale === 1 ? 'deformations at true scale' : `deformations exaggerated ×${state.scale}`;
     recompute();
+  };
+  inputs.scale.oninput = applyScale;
+  $('true-scale').onclick = () => {
+    inputs.scale.value = inputs.scale.value === '1' ? '20' : '1';
+    $('true-scale').textContent = inputs.scale.value === '1' ? '×20' : 'true scale';
+    applyScale();
   };
 
   // click on the bridge → learn card

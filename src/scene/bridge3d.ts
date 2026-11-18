@@ -45,6 +45,7 @@ export class Bridge3D {
   visuals = new Map<number, ElementVisual>();
   /** lateral-model node index for each vertical-model node (deck and pylon nodes) */
   private lateralIndex = new Map<number, number>();
+  private pierShape = new Map<number, { lat: number; factor: number }>();
   private nodePositions: THREE.Vector3[] = [];
   private model: BridgeModel;
 
@@ -59,6 +60,20 @@ export class Bridge3D {
         const deckNode = model.deckNodes.find((n) => Math.abs(v.nodes[n].x - PIER_X[e.pylon!.pylon]) < 1e-6)!;
         this.lateralIndex.set(el.i, this.lateralIndex.get(deckNode)!);
         this.lateralIndex.set(el.j, this.lateralIndex.get(deckNode)!);
+      }
+    // pier nodes: lateral displacement follows the bending line of a cantilever
+    // loaded at its top (w = δ_top · ξ²(3 − ξ)/2, ξ = height above foundation / H)
+    for (const e of model.elements)
+      if (e.part === 'pier') {
+        const { pier, zTopI, zTopJ } = e.pier!;
+        const H = PIER_HEIGHTS[pier];
+        const deckNode = model.deckNodes.find((n) => Math.abs(v.nodes[n].x - PIER_X[pier]) < 1e-6)!;
+        const top = this.lateralIndex.get(deckNode)!;
+        const el = v.elements[e.index];
+        for (const [node, z] of [[el.i, zTopI], [el.j, zTopJ]] as const) {
+          const xi = (H - z) / H;
+          if (node !== deckNode) this.pierShape.set(node, { lat: top, factor: (xi * xi * (3 - xi)) / 2 });
+        }
       }
     this.nodePositions = v.nodes.map((n) => new THREE.Vector3(n.x - BRIDGE_LENGTH / 2, n.y, 0));
     for (const e of model.elements) this.createVisual(e);
@@ -156,6 +171,8 @@ export class Bridge3D {
       out.y += ev(node * 3 + 1) * scale;
       const lat = this.lateralIndex.get(node);
       if (lat !== undefined) out.z += this.model.lateralDisplacement(lat, wind) * scale;
+      const ps = this.pierShape.get(node);
+      if (ps) out.z += this.model.lateralDisplacement(ps.lat, wind) * ps.factor * scale;
     }
     return out;
   }
