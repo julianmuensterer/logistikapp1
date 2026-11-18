@@ -7,13 +7,20 @@ import type { Bridge3D } from './bridge3d';
 const CAR_LENGTH = 9;
 const SLOT_SPACING = 12;
 const LANES = [-9.5, -4.5, 4.5, 9.5];
+/** Lanes move at slightly different speeds so the traffic looks natural. */
+const LANE_SPEED = [1.0, 0.86, 0.93, 1.07];
 const LEVEL_HEIGHT = 4.2;
-const SLOTS_PER_LANE = Math.floor((BRIDGE_LENGTH - 20) / SLOT_SPACING);
+/** Cars drive in a loop: across the bridge and on along the approach roads. */
+const APPROACH = 300;
+const LOOP = BRIDGE_LENGTH + 2 * APPROACH;
+const SLOTS_PER_LANE = Math.floor(LOOP / SLOT_SPACING);
+const LOOP_EXACT = SLOTS_PER_LANE * SLOT_SPACING;
 export const SLOTS_PER_LAYER = SLOTS_PER_LANE * LANES.length;
 /** One full layer of toy cars represents 1 kN/m² of traffic area load. */
 export const CARS_PER_KN_M2 = SLOTS_PER_LAYER;
 export const MAX_Q = 25;
 const MAX_CARS = Math.ceil(MAX_Q * CARS_PER_KN_M2);
+const ROAD_TOP = -0.5; // top of the approach roads
 
 const PALETTE = ['#ff6b6b', '#4dabf7', '#ffd43b', '#69db7c', '#b197fc', '#ffa94d', '#f783ac', '#38d9a9'];
 
@@ -31,7 +38,8 @@ export class Cars {
   cabin: THREE.InstancedMesh;
   private order: number[];
   private count = 0;
-  private driveOffset = 0;
+  /** distance travelled per lane [m], grows continuously (no jumps) */
+  private travelled = LANES.map(() => 0);
 
   constructor(scene: THREE.Scene) {
     const bodyGeo = new THREE.BoxGeometry(CAR_LENGTH, 2.2, 4).translate(0, 1.6, 0);
@@ -56,12 +64,14 @@ export class Cars {
     this.body.count = this.cabin.count = this.count;
   }
 
-  /** Cars drive while the bridge is nearly empty and come to a standstill as traffic grows. */
+  /**
+   * Cars always drive. The more traffic, the slower they get (stop-and-go in a jam),
+   * but every car moves continuously along its lane.
+   */
   tick(dt: number, q: number): boolean {
-    const speed = Math.max(0, 1 - q / 0.8) * 28; // m/s
-    if (speed === 0) return false;
-    this.driveOffset = (this.driveOffset + speed * dt) % SLOT_SPACING;
-    return true;
+    const speed = 30 / (1 + 0.6 * q); // m/s: 108 km/h on an empty bridge
+    this.travelled = this.travelled.map((d, l) => (d + speed * LANE_SPEED[l] * dt) % LOOP_EXACT);
+    return this.count > 0;
   }
 
   update(bridge: Bridge3D, scale: number, wind: number): void {
@@ -77,13 +87,17 @@ export class Cars {
       const lane = slot % LANES.length;
       const dir = LANES[lane] > 0 ? 1 : -1;
       const n = Math.floor(slot / LANES.length);
-      let x = 10 + n * SLOT_SPACING + (layer === 0 ? dir * this.driveOffset : (rand(i) - 0.5) * 3);
-      if (x > BRIDGE_LENGTH - 6) x -= BRIDGE_LENGTH - 16;
-      if (x < 6) x += BRIDGE_LENGTH - 16;
-      bridge.deckOffset(x, scale, wind, off);
-      p.set(x - BRIDGE_LENGTH / 2, off.y + layer * LEVEL_HEIGHT, LANES[lane] + off.z + (layer ? (rand(i + 7) - 0.5) * 2 : 0));
-      const jitter = layer ? 1 : 0;
-      e.set((rand(i + 3) - 0.5) * 0.25 * jitter, (dir > 0 ? 0 : Math.PI) + (rand(i + 5) - 0.5) * 0.9 * jitter, (rand(i + 9) - 0.5) * 0.25 * jitter);
+      // position along the loop; piles of cars ride on top of the car below them
+      let along = (n * SLOT_SPACING + dir * this.travelled[lane]) % LOOP_EXACT;
+      if (along < 0) along += LOOP_EXACT;
+      const x = along - APPROACH;
+      const onBridge = x >= 0 && x <= BRIDGE_LENGTH;
+      if (onBridge) bridge.deckOffset(x, scale, wind, off);
+      else off.set(0, ROAD_TOP, 0);
+      const pile = layer ? 1 : 0;
+      p.set(x - BRIDGE_LENGTH / 2 + pile * (rand(i) - 0.5) * 3, off.y + layer * LEVEL_HEIGHT,
+        LANES[lane] + off.z + pile * (rand(i + 7) - 0.5) * 2);
+      e.set((rand(i + 3) - 0.5) * 0.25 * pile, (dir > 0 ? 0 : Math.PI) + (rand(i + 5) - 0.5) * 0.9 * pile, (rand(i + 9) - 0.5) * 0.25 * pile);
       q.setFromEuler(e);
       m.compose(p, q, s);
       this.body.setMatrixAt(i, m);
