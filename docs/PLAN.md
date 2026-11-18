@@ -121,13 +121,14 @@ Example: a 40 t truck ≈ 0.39 MN; the deck steel alone ≈ 36,000 t ≈ 353 MN.
 
 **MVP (first playable version)**
 - Stylized 3D bridge with orbit camera and 3 preset views.
-- Wind slider and traffic slider; toy vehicles on the deck.
+- Wind slider and traffic slider (uniform area load in kN/m²); toy cars that fill the lanes and pile up as the load grows.
+- Toggle for partial safety factors.
 - 2D FE frame model in the longitudinal plane (deck + pylons + piers as beams, stays as
   tension-only trusses), linear static solve in the browser.
 - Lateral wind handled by a simple separate 2D model (deck as a continuous beam on elastic
   pier supports) or a hand formula. Combined into one utilization check.
 - Result panel with load and tolerable load in MN and t, utilization bar.
-- Failure state with a scripted collapse animation and a reset.
+- Failure state: the first failing element visibly breaks or snaps, then the image freezes and turns black and white; reset button.
 - Learn hotspots for the 5 main components and a fact sheet with sources.
 - English UI, desktop browsers (Chrome, Firefox, Edge).
 
@@ -202,20 +203,26 @@ docs/
 
 ---
 
-## 8. Open questions
+## 8. Decisions (2026-11-18)
 
-1. **Depth of FEM content:** should students see stiffness matrices and element formulations
-   in the app, or only results (colors, deflections)?
-2. **2D vs. 3D model** for the MVP: is a 2D longitudinal model plus a simple lateral model
-   enough for the course?
-3. **Safety factors:** show characteristic values only, or include partial factors
-   (Eurocode style) so "tolerable load" means design capacity?
-4. **Traffic model:** individual cars and trucks, or Eurocode Load Model 1
-   (uniform load + tandem axles)?
-5. **Collapse style:** how dramatic should it be (scripted cartoon collapse vs. just
-   showing the failed element in red)?
-6. **Language:** English only, or a German toggle?
-7. **Use in class:** will the lecturer project it, or will students use it on their own
-   laptops? Is a score / challenge mode wanted?
-8. **Hosting:** is GitHub Pages fine, or does it need to run offline / on the university LMS?
-9. **Repo name:** the repo is called `logistikapp1`. Keep it or rename it later?
+Answers from Julian to the open questions of the first draft:
+
+| Question | Decision |
+|---|---|
+| Depth of FEM content | Show the **results** of the stiffness-matrix solve (displacements, element forces, utilization). The matrix itself does not need to be displayed. |
+| 2D vs. 3D model | A **2D FE model** is enough for the MVP. |
+| Safety factors | A **toggle** switches partial safety factors on and off. |
+| Traffic model | Statics use a **uniform area load** (kN/m²). Visually it should look like more and more cars pile up on the deck. |
+| Collapse | It is enough to see **something break or snap**; then the picture **freezes and turns black and white**. |
+
+Partial factors used when the toggle is on (Eurocode style, simplified):
+γ<sub>G</sub> = 1.35 (self-weight), γ<sub>Q</sub> = 1.5 (traffic), γ<sub>W</sub> = 1.5 (wind),
+γ<sub>M0</sub> = 1.0 (structural steel), γ<sub>M</sub> = 1.5 (stay cables, on f<sub>uk</sub>),
+γ<sub>c</sub> = 1.5 (concrete, with α<sub>cc</sub> = 0.85).
+
+## 9. Still open
+
+1. **Language:** English only, or a German toggle?
+2. **Use in class:** projector, or students on their own laptops? Is a challenge mode wanted later?
+3. **Hosting:** is GitHub Pages fine, or does it need to run offline / on the university LMS?
+4. **Repo name:** the repo is called `logistikapp1`. Keep it or rename it later?
