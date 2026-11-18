@@ -191,6 +191,19 @@ function init(): void {
     bar.style.background = pct < 50 ? 'var(--ok)' : pct < 85 ? '#ffb020' : 'var(--bad)';
     $('eta-val').textContent = `${fmt(pct)} %`;
     $('eta-el').textContent = model.element(ev.governing).label;
+    // always-visible HUD over the 3D view
+    const etaColor = bar.style.background;
+    const hb = $('hud-eta-bar');
+    hb.style.width = `${Math.min(100, pct)}%`;
+    hb.style.background = etaColor;
+    $('hud-eta-val').textContent = `${fmt(pct)} %`;
+    $('hud-eta-el').textContent = model.element(ev.governing).label;
+    const loadPct = tol > 0 ? (trafficTotal / tol) * 100 : (trafficTotal > 0 ? Infinity : 0);
+    const lb = $('hud-load-bar');
+    lb.style.width = `${Math.min(100, loadPct)}%`;
+    lb.style.background = loadPct < 50 ? 'var(--ok)' : loadPct < 85 ? '#ffb020' : 'var(--bad)';
+    $('hud-load-val').textContent = `${MN(trafficTotal)} / ${MN(tol)}`;
+    $('hud-load-sub').textContent = `${TONNES(trafficTotal)} of ${TONNES(tol)} tolerable${state.safety ? ' (with γ)' : ''}`;
 
     let maxDefl = 0, maxDrift = 0;
     model.deckNodes.forEach((n, t) => {
