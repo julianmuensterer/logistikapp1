@@ -221,10 +221,10 @@ export function placeBetween(mesh: THREE.Object3D, a: THREE.Vector3, b: THREE.Ve
   const len = dir.length();
   mesh.position.copy(a).addScaledVector(dir, 0.5);
   dir.normalize();
-  if (dir.y >= 0) {
+  if (dir.y > -0.5) {
     mesh.quaternion.setFromUnitVectors(UP, dir);
   } else {
-    // Pointing downwards (piers): the shortest rotation from +Y to almost -Y is
+    // Pointing steeply downwards (piers): the shortest rotation from +Y to almost -Y is
     // unstable and makes the mesh spin around its axis. Flip first, then tilt.
     mesh.quaternion.setFromUnitVectors(UP, dir.negate()).multiply(FLIP);
   }
